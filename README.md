@@ -32,3 +32,9 @@ Deschide http://127.0.0.1:5000. La prima pornire, Flask creează baza SQLite `ap
 Pornește Flask într-un terminal cu `python app/main.py`. În alt terminal rulează `cd app/frontend` apoi `npm.cmd run dev`. Vite redirecționează apelurile `/api` către Flask.
 
 Programul și datele despre concentrare sunt demonstrative în această primă versiune. Sarcinile și obiectivele se salvează în SQLite și pot fi adăugate, completate, actualizate și șterse din aplicație.
+
+## Star Analyzer
+
+**Demo online: https://stellar-observatory-zeta.vercel.app**
+
+Folderul `star-analyzer/` conține un proiect separat: Stellar Observatory, un analizor de stele într-o singură pagină (HTML, CSS și JavaScript, fără compilare). Calculează luminozitatea, spectrul Planck, clasa spectrală și evoluția stelelor și le afișează în 3D cu WebGL. Instrucțiunile de pornire sunt în [star-analyzer/README.md](star-analyzer/README.md).

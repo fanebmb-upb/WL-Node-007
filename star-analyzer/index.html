@@ -1,0 +1,2979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#000005">
+<meta name="description" content="Physics-accurate stellar analysis engine. Compute luminosity, flux, gravitational redshift, and evolutionary timelines.">
+<title>Stellar Observatory — Star Analyzer</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════
+   TOKENS
+══════════════════════════════════════════ */
+:root {
+  --black:   #000005;
+  --deep:    #06080f;
+  --panel:   rgba(8,11,22,0.88);
+  --surface: rgba(14,18,32,0.7);
+  --border:  rgba(80,120,255,0.13);
+  --border2: rgba(80,120,255,0.30);
+  --cyan:    #00d4e8;
+  --cyan2:   #00b8d9;
+  --gold:    #f0a830;
+  --red:     #ff4455;
+  --green:   #00e888;
+  --muted:   #3a4468;
+  --text:    #b8c8e8;
+  --dim:     #566080;
+  --white:   #eef2ff;
+  --mono:    'Space Mono', monospace;
+  --ui:      'Outfit', sans-serif;
+  --radius:  3px;
+}
+
+/* ══════════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════════ */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--ui);
+  background: var(--black);
+  color: var(--text);
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+img { display:block; max-width:100%; }
+[hidden] { display: none !important; } /* author display rules must not override the attribute */
+button { font-family: var(--ui); }
+a { color: inherit; }
+
+/* ══════════════════════════════════════════
+   STARFIELD
+══════════════════════════════════════════ */
+#starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════
+   PAGE WRAPPER
+══════════════════════════════════════════ */
+.page { position: relative; z-index: 1; }
+
+/* ══════════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════════ */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2.5rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,5,0.75);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition: padding 0.4s;
+}
+nav.compact { padding: 0.75rem 2.5rem; }
+
+.nav-logo {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--white);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-logo-dot {
+  width: 7px; height: 7px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: blink 3s ease infinite;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  list-style: none;
+}
+.nav-links a {
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: color 0.25s;
+  font-family: var(--mono);
+}
+.nav-links a:hover { color: var(--cyan); }
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.nav-status {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.nav-status::before {
+  content: '';
+  width: 5px; height: 5px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: blink 2.5s ease infinite;
+}
+
+/* Hamburger */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 4px;
+  background: none;
+  border: none;
+}
+.hamburger span {
+  display: block;
+  width: 22px; height: 1.5px;
+  background: var(--text);
+  transition: all 0.3s;
+  transform-origin: center;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+
+/* Mobile nav drawer */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,5,0.97);
+  z-index: 190;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+}
+.mobile-nav.open { display: flex; }
+.mobile-nav a {
+  font-family: var(--mono);
+  font-size: 1.2rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.mobile-nav a:hover { color: var(--cyan); }
+
+/* ══════════════════════════════════════════
+   HERO
+══════════════════════════════════════════ */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 7rem 1.5rem 5rem;
+  position: relative;
+}
+
+.hero-badge {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  border: 1px solid rgba(0,212,232,0.2);
+  padding: 0.35rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 2.5rem;
+  display: inline-block;
+  animation: fadeUp 0.9s ease 0.2s both;
+}
+
+.hero-title {
+  font-family: var(--ui);
+  font-size: clamp(2.2rem, 5.5vw, 4.2rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  color: var(--white);
+  margin-bottom: 0.6rem;
+  animation: fadeUp 0.9s ease 0.35s both;
+}
+.hero-title-accent {
+  color: var(--cyan);
+  font-weight: 300;
+}
+.hero-subtitle-line {
+  font-family: var(--mono);
+  font-size: clamp(0.65rem, 1.5vw, 0.78rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 2rem;
+  animation: fadeUp 0.9s ease 0.5s both;
+}
+.hero-desc {
+  font-size: clamp(0.82rem, 2vw, 0.95rem);
+  color: var(--dim);
+  line-height: 1.85;
+  max-width: 480px;
+  margin: 0 auto 3rem;
+  animation: fadeUp 0.9s ease 0.65s both;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  animation: fadeUp 0.9s ease 0.8s both;
+}
+
+/* ══════════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.8rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-decoration: none;
+  border: none;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--cyan);
+  color: var(--black);
+  font-weight: 700;
+}
+.btn-primary:hover {
+  background: var(--white);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 35px rgba(0,212,232,0.28);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+.btn-ghost:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  transform: translateY(-2px);
+}
+.btn-sm {
+  padding: 0.55rem 1.2rem;
+  font-size: 0.65rem;
+}
+
+/* ══════════════════════════════════════════
+   SCROLL HINT
+══════════════════════════════════════════ */
+.scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  animation: fadeUp 1s ease 1.2s both;
+}
+.scroll-line {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, var(--cyan));
+  animation: scrollPulse 2.2s ease infinite;
+}
+.scroll-hint span {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════
+   SECTIONS
+══════════════════════════════════════════ */
+section { padding: 5rem 2.5rem; }
+
+.section-tag {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.section-tag::before { content: '//'; color: var(--muted); }
+.section-title {
+  font-family: var(--ui);
+  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+  font-weight: 600;
+  color: var(--white);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.3rem;
+}
+.section-header { margin-bottom: 2.5rem; }
+
+/* ══════════════════════════════════════════
+   PANEL
+══════════════════════════════════════════ */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.panel-header {
+  padding: 0.75rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(80,120,255,0.04);
+}
+.panel-title {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+.panel-dots { display: flex; gap: 0.35rem; }
+.panel-dots span {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.panel-dots span:nth-child(1) { background: var(--red); }
+.panel-dots span:nth-child(2) { background: var(--gold); }
+.panel-dots span:nth-child(3) { background: var(--green); }
+.panel-body { padding: 1.2rem; }
+
+/* ══════════════════════════════════════════
+   ANALYZER LAYOUT
+══════════════════════════════════════════ */
+.analyzer-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* ══════════════════════════════════════════
+   FORM
+══════════════════════════════════════════ */
+.form-grid { display: flex; flex-direction: column; gap: 0.9rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; }
+.field label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.field input {
+  background: rgba(80,120,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.85rem;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  width: 100%;
+  -webkit-appearance: none;
+}
+.field input:focus {
+  border-color: var(--cyan);
+  background: rgba(0,212,232,0.04);
+}
+.field input::placeholder { color: var(--muted); }
+
+.analyze-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background: var(--cyan);
+  color: var(--black);
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.25s;
+  margin-top: 0.25rem;
+}
+.analyze-btn:hover {
+  background: var(--white);
+  box-shadow: 0 8px 28px rgba(0,212,232,0.22);
+}
+.analyze-btn:active { transform: scale(0.98); }
+
+/* ══════════════════════════════════════════
+   STAR LIST
+══════════════════════════════════════════ */
+.stars-list { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.9rem; }
+.star-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  background: rgba(80,120,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.star-chip:hover, .star-chip.active {
+  border-color: rgba(0,212,232,0.4);
+  background: rgba(0,212,232,0.06);
+}
+.star-chip-name { font-size: 0.8rem; color: var(--white); font-weight: 500; }
+.star-chip-meta { font-family: var(--mono); font-size: 0.58rem; color: var(--dim); margin-top: 0.15rem; }
+.star-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.chip-actions { display: flex; gap: 0.5rem; }
+
+/* ══════════════════════════════════════════
+   DATA GRID
+══════════════════════════════════════════ */
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.data-cell {
+  background: var(--panel);
+  padding: 0.9rem 1rem;
+  transition: background 0.2s;
+}
+.data-cell:hover { background: rgba(0,212,232,0.04); }
+.data-cell-label {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 0.4rem;
+}
+.data-cell-value {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--white);
+}
+.data-cell-unit { font-size: 0.58rem; color: var(--dim); margin-left: 0.15rem; }
+
+/* ══════════════════════════════════════════
+   STAR VISUAL
+══════════════════════════════════════════ */
+.star-canvas-wrap {
+  height: 320px;
+  background: rgba(0,0,5,0.7);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+.star-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#starCanvas { cursor: grab; }
+#starCanvas:active { cursor: grabbing; }
+.star-canvas-wrap > div { pointer-events: none; }
+.star-canvas-name {
+  position: absolute;
+  top: 1rem; left: 1rem;
+  font-family: var(--ui);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--white);
+}
+.star-canvas-type {
+  position: absolute;
+  top: 1rem; right: 1rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  border: 1px solid rgba(0,212,232,0.2);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius);
+}
+.star-canvas-size {
+  position: absolute;
+  bottom: 0.75rem; right: 1rem;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.star-canvas-note {
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  color: var(--dim);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+}
+.star-canvas-note .hint-drag { color: var(--muted); }
+.star-canvas-hint {
+  position: absolute;
+  bottom: 0.75rem; left: 1rem;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════
+   STATUS BAR
+══════════════════════════════════════════ */
+.status-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  padding: 0.8rem 1rem;
+  background: rgba(80,120,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+.s-indicator { display: flex; align-items: center; gap: 0.35rem; }
+.s-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════
+   WAVELENGTH
+══════════════════════════════════════════ */
+.wl-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(to right,#7b00d4,#3300ff,#00aaff,#00ff88,#aaff00,#ffaa00,#ff0000);
+  margin: 0.4rem 0;
+  position: relative;
+}
+.wl-marker {
+  position: absolute;
+  top: -3.5px;
+  width: 2px; height: 12px;
+  background: #fff;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  transition: left 0.5s ease;
+}
+.wl-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.5rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+/* ══════════════════════════════════════════
+   EVOLUTION TIMELINE
+══════════════════════════════════════════ */
+.evo-timeline { display: flex; flex-direction: column; }
+.evo-stage {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.2s;
+}
+.evo-stage:last-child { border-bottom: none; }
+.evo-stage:hover { background: rgba(0,212,232,0.025); }
+.evo-dot-col { display: flex; flex-direction: column; align-items: center; }
+.evo-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--cyan);
+  background: var(--black);
+  flex-shrink: 0;
+}
+.evo-dot.filled { background: var(--cyan); }
+.evo-connector { width: 1px; flex: 1; min-height: 24px; background: var(--border); margin: 3px 0; }
+.evo-content { flex: 1; }
+.evo-num {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  margin-bottom: 0.2rem;
+  text-transform: uppercase;
+}
+.evo-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 0.2rem;
+}
+.evo-age { font-family: var(--mono); font-size: 0.65rem; color: var(--cyan); }
+.evo-detail { font-family: var(--mono); font-size: 0.58rem; color: var(--dim); margin-top: 0.15rem; }
+
+/* ══════════════════════════════════════════
+   SORT TABLE
+══════════════════════════════════════════ */
+.sort-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.sort-btn {
+  padding: 0.45rem 1rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sort-btn:hover, .sort-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(0,212,232,0.05);
+}
+.star-table { width: 100%; border-collapse: collapse; min-width: 700px; }
+.star-table th {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 0.7rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.star-table td {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(80,120,255,0.06);
+  transition: background 0.15s;
+}
+.star-table tr:hover td { background: rgba(0,212,232,0.03); cursor: pointer; }
+.td-name { color: var(--white); font-weight: 700; }
+.td-badge {
+  display: inline-flex;
+  padding: 0.18rem 0.55rem;
+  border-radius: 2px;
+  font-size: 0.55rem;
+  letter-spacing: 0.07em;
+  border: 1px solid;
+}
+
+/* ══════════════════════════════════════════
+   ABOUT / CODE
+══════════════════════════════════════════ */
+.about-section {
+  background: rgba(5,7,16,0.5);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3.5rem;
+  align-items: center;
+}
+.about-text p {
+  font-size: 0.82rem;
+  color: var(--dim);
+  line-height: 1.9;
+  margin-bottom: 1rem;
+}
+.code-block {
+  background: rgba(0,0,5,0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  line-height: 1.85;
+  overflow: hidden;
+  position: relative;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.code-block::before {
+  content: 'C++ SOURCE';
+  position: absolute;
+  top: 0.6rem; right: 1rem;
+  font-size: 0.5rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+.c-kw { color: #c792ea; }
+.c-ty { color: var(--gold); }
+.c-st { color: var(--green); }
+.c-cm { color: var(--muted); font-style: italic; }
+.c-nu { color: var(--cyan); }
+.c-fn { color: #7ab4ff; }
+
+/* ══════════════════════════════════════════
+   FEATURES GRID
+══════════════════════════════════════════ */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 3rem;
+}
+.feature-card {
+  background: var(--panel);
+  padding: 1.8rem 1.4rem;
+  transition: background 0.2s;
+}
+.feature-card:hover { background: rgba(0,212,232,0.04); }
+.feature-icon { font-size: 1.3rem; margin-bottom: 0.8rem; }
+.feature-name { font-size: 0.9rem; font-weight: 600; color: var(--white); margin-bottom: 0.4rem; }
+.feature-desc { font-size: 0.72rem; color: var(--dim); line-height: 1.7; }
+
+/* ══════════════════════════════════════════
+   EMPTY STATE
+══════════════════════════════════════════ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3.5rem 2rem;
+  text-align: center;
+  color: var(--dim);
+  gap: 0.75rem;
+}
+.empty-icon { font-size: 2.5rem; opacity: 0.25; }
+.empty-label { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; }
+.empty-sub { font-size: 0.62rem; color: var(--muted); }
+
+/* ══════════════════════════════════════════
+   RESULTS AREA
+══════════════════════════════════════════ */
+.results-area { display: flex; flex-direction: column; gap: 1.2rem; }
+
+/* ══════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════ */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 1.8rem 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: rgba(0,0,5,0.8);
+}
+.footer-logo { font-family: var(--mono); font-size: 0.72rem; color: var(--dim); }
+.footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.footer-links a {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.footer-links a:hover { color: var(--cyan); }
+.footer-copy { font-family: var(--mono); font-size: 0.58rem; color: var(--muted); }
+
+/* ══════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  bottom: 1.5rem; right: 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.3rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--cyan);
+  z-index: 300;
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all 0.35s ease;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  max-width: 280px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* ══════════════════════════════════════════
+   REVEAL ANIMATIONS
+══════════════════════════════════════════ */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-d1 { transition-delay: 0.1s; }
+.reveal-d2 { transition-delay: 0.2s; }
+.reveal-d3 { transition-delay: 0.3s; }
+
+/* ══════════════════════════════════════════
+   CHARTS
+══════════════════════════════════════════ */
+.chart-wrap {
+  position: relative;
+  background: rgba(0,0,5,0.7);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.chart-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: rgba(8,11,22,0.96);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  line-height: 1.7;
+  color: var(--text);
+  z-index: 5;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.chart-tooltip.show { opacity: 1; }
+.chart-legend {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1rem 0.1rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.chart-legend .lg { display: flex; align-items: center; gap: 0.45rem; }
+.chart-legend .sw  { width: 14px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.chart-legend .swd { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--black); box-shadow: 0 0 0 1px rgba(255,255,255,0.15); }
+
+/* EM spectrum bar */
+.em-bar {
+  height: 14px;
+  border-radius: 3px;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.em-marker {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 24px;
+  background: #fff;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  transition: left 0.5s ease;
+  box-shadow: 0 0 6px rgba(255,255,255,0.8);
+}
+.em-bands {
+  display: flex;
+  font-family: var(--mono);
+  font-size: 0.48rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════
+   KEYFRAMES
+══════════════════════════════════════════ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+  0%,100% { opacity:1; }
+  50% { opacity:0.3; }
+}
+@keyframes scrollPulse {
+  0%   { opacity:0; transform:scaleY(0); transform-origin:top; }
+  50%  { opacity:1; transform:scaleY(1); }
+  100% { opacity:0; transform:scaleY(0); transform-origin:bottom; }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — TABLET
+══════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .analyzer-layout { grid-template-columns: 1fr; }
+  .about-grid { grid-template-columns: 1fr; gap: 2rem; }
+  .data-grid { grid-template-columns: repeat(2, 1fr); }
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+  .nav-status { display: none; }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — MOBILE
+══════════════════════════════════════════ */
+@media (max-width: 600px) {
+  nav { padding: 0.9rem 1.2rem; }
+  section { padding: 4rem 1.2rem; }
+  footer { padding: 1.5rem 1.2rem; flex-direction: column; align-items: flex-start; }
+  .hero { padding: 6rem 1.2rem 4rem; }
+  .hero-actions { flex-direction: column; align-items: center; width: 100%; }
+  .hero-actions .btn { width: 100%; justify-content: center; }
+  .form-row { grid-template-columns: 1fr; }
+  .data-grid { grid-template-columns: repeat(2,1fr); }
+  .features-grid { grid-template-columns: 1fr; }
+  .sort-controls { gap: 0.4rem; }
+  .chip-actions { flex-direction: column; gap: 0.35rem; }
+  .chip-actions .btn-sm { width: 100%; justify-content: center; }
+  .star-canvas-wrap { height: 260px; }
+  .star-canvas-hint { bottom: 2.1rem; }            /* stack above the size label */
+  .star-canvas-name { max-width: 48%; font-size: 0.9rem; }
+  .star-canvas-type { max-width: 48%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scroll-hint { display: none; }
+}
+
+/* iOS safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  footer { padding-bottom: calc(1.8rem + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+}
+
+/* ══════════════════════════════════════════
+   v4 — UNITS, VIEW TOGGLES, EVOLUTION PLAYER, COMPARE
+══════════════════════════════════════════ */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+.unit-select, .field select {
+  background: rgba(80,120,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+  outline: none;
+}
+.field select { color: var(--white); font-size: 0.75rem; padding: 0.55rem 0.7rem; width: 100%; }
+.unit-select:focus, .field select:focus { border-color: var(--cyan); }
+.unit-select option, .field select option { background: var(--deep); color: var(--text); }
+
+.panel-tools { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.seg button {
+  background: transparent; border: none; color: var(--dim);
+  font-family: var(--mono); font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 0.3rem 0.65rem; cursor: pointer; transition: color 0.2s, background 0.2s;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button:hover, .seg button.active { color: var(--cyan); background: rgba(0,212,232,0.06); }
+.seg-check {
+  font-family: var(--mono); font-size: 0.55rem; color: var(--dim); letter-spacing: 0.1em;
+  text-transform: uppercase; display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer;
+}
+.seg-check input { accent-color: var(--cyan); }
+.star-canvas-mode {
+  position: absolute;
+  top: 2.7rem; left: 1rem;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.evo-player { padding: 0.75rem 1rem 0.6rem; border-top: 1px solid var(--border); }
+.evo-row { display: flex; align-items: center; gap: 0.8rem; }
+.evo-play {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 50%; border: 1px solid var(--cyan);
+  background: transparent; color: var(--cyan);
+  font-size: 0.65rem; cursor: pointer; transition: background 0.2s;
+}
+.evo-play:hover { background: rgba(0,212,232,0.12); }
+.evo-track { flex: 1; min-width: 0; }
+.evo-slider { width: 100%; accent-color: var(--cyan); margin: 0; display: block; }
+.evo-ticks { position: relative; height: 1.7rem; margin-top: 0.2rem; }
+.evo-ticks span.end { top: 0.8rem; transform: translateX(-100%); border-left: none; border-right: 1px solid var(--border2); padding: 0 0.3rem 0 0; }
+.evo-ticks span {
+  position: absolute; top: 0; white-space: nowrap;
+  font-family: var(--mono); font-size: 0.48rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); border-left: 1px solid var(--border2); padding-left: 0.3rem;
+}
+.evo-readout { font-family: var(--mono); font-size: 0.6rem; color: var(--text); margin-top: 0.45rem; min-height: 1em; }
+.evo-unavail { font-family: var(--mono); font-size: 0.58rem; color: var(--dim); }
+.evo-stage.current { background: rgba(0,212,232,0.05); }
+.evo-stage.current .evo-dot { box-shadow: 0 0 0 4px rgba(0,212,232,0.22); }
+.evo-approx { font-family: var(--mono); font-size: 0.52rem; color: var(--gold); letter-spacing: 0.1em; text-transform: uppercase; }
+.panel-link {
+  background: none; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; color: var(--cyan);
+}
+.panel-link:hover { color: var(--white); }
+
+.compare-pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; padding: 1rem 1.2rem; }
+.compare-render { height: 320px; position: relative; background: rgba(0,0,5,0.7); }
+.compare-render canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.compare-render > div { pointer-events: none; }
+.compare-render .cmp-right { left: auto; right: 1rem; text-align: right; }
+.compare-render .cmp-left { right: auto; left: 1rem; }
+.compare-render .star-canvas-size { top: 2.6rem; bottom: auto; font-size: 0.55rem; }
+.compare-fallback { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.compare-fallback canvas { position: relative; }
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+.compare-col { background: var(--panel); min-width: 0; }
+.compare-stats {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem 1rem;
+  padding: 0.8rem 1rem 1rem; font-family: var(--mono); font-size: 0.62rem; color: var(--white);
+}
+.compare-stats .k { display: block; font-size: 0.5rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-bottom: 0.15rem; }
+
+@media (max-width: 600px) {
+  .compare-pickers { grid-template-columns: 1fr; }
+  .compare-cols { grid-template-columns: 1fr; }
+  .compare-render { height: 240px; }
+  .panel-header { flex-wrap: wrap; gap: 0.5rem; }
+}
+
+/* Table scroll on mobile */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<div class="page">
+
+<!-- ── NAV ── -->
+<nav id="nav">
+  <a href="#" class="nav-logo">
+    <div class="nav-logo-dot"></div>
+    Stellar Observatory
+  </a>
+  <ul class="nav-links">
+    <li><a href="#analyzer">Analyzer</a></li>
+    <li><a href="#hr">H–R Diagram</a></li>
+    <li><a href="#sort">Compare</a></li>
+    <li><a href="#about">About</a></li>
+    <li><a href="#" id="navGithub" target="_blank" rel="noopener">GitHub ↗</a></li>
+  </ul>
+  <div class="nav-right">
+    <div class="nav-status">SYSTEM ONLINE</div>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile nav drawer -->
+<div class="mobile-nav" id="mobileNav">
+  <a href="#analyzer" onclick="closeMobileNav()">Analyzer</a>
+  <a href="#hr" onclick="closeMobileNav()">H–R Diagram</a>
+  <a href="#sort" onclick="closeMobileNav()">Compare</a>
+  <a href="#about" onclick="closeMobileNav()">About</a>
+  <a href="#" id="mobileGithub" target="_blank" rel="noopener">GitHub ↗</a>
+</div>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-badge">Astrophysics Simulation Engine · v4.0</div>
+  <h1 class="hero-title">
+    Stellar<br>
+    <span class="hero-title-accent">Observatory</span>
+  </h1>
+  <p class="hero-subtitle-line">Physics-accurate star analysis system</p>
+  <p class="hero-desc">
+    Compute luminosity, Planck emission spectra, spectral class, bolometric magnitudes,
+    gravitational redshift, and evolutionary timelines — then place every star on a live
+    Hertzsprung–Russell diagram with physically accurate blackbody color.
+  </p>
+  <div class="hero-actions">
+    <a href="#analyzer" class="btn btn-primary">▶ Launch Analyzer</a>
+    <a href="#" class="btn btn-ghost" id="heroGithub" target="_blank" rel="noopener">⬡ View on GitHub</a>
+  </div>
+  <div class="scroll-hint">
+    <div class="scroll-line"></div>
+    <span>scroll</span>
+  </div>
+</section>
+
+<!-- ── ANALYZER ── -->
+<section id="analyzer">
+  <div class="section-header reveal">
+    <div class="section-tag">Core Module</div>
+    <h2 class="section-title">Star Analyzer</h2>
+  </div>
+
+  <div class="analyzer-layout">
+
+    <!-- Left column -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+
+      <!-- Input -->
+      <div class="panel reveal reveal-d1">
+        <div class="panel-header">
+          <span class="panel-title">Input Parameters</span>
+          <div class="panel-dots"><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="field">
+              <label for="inp-name">Star Name</label>
+              <input type="text" id="inp-name" placeholder="e.g. Betelgeuse" autocomplete="off">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <div class="field-label-row">
+                  <label for="inp-radius">Radius</label>
+                  <select id="unit-radius" class="unit-select" aria-label="Radius unit">
+                    <option value="Rsun">R☉</option><option value="km">km</option><option value="m">m</option>
+                  </select>
+                </div>
+                <input type="number" id="inp-radius" placeholder="1.0" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="inp-temp">Temperature (K)</label>
+                <input type="number" id="inp-temp" placeholder="5778" inputmode="decimal">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <div class="field-label-row">
+                  <label for="inp-dist">Distance</label>
+                  <select id="unit-dist" class="unit-select" aria-label="Distance unit">
+                    <option value="ly">ly</option><option value="pc">pc</option><option value="AU">AU</option><option value="m">m</option>
+                  </select>
+                </div>
+                <input type="number" id="inp-dist" placeholder="4.24" inputmode="decimal">
+              </div>
+              <div class="field">
+                <label for="inp-mass">Initial Mass (M☉)</label>
+                <input type="number" id="inp-mass" placeholder="1.0" inputmode="decimal">
+              </div>
+            </div>
+            <button class="analyze-btn" onclick="addStar()">+ Analyze Star</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Registry -->
+      <div class="panel reveal reveal-d2">
+        <div class="panel-header">
+          <span class="panel-title">Star Registry</span>
+          <span id="star-count" style="font-family:var(--mono);font-size:0.58rem;color:var(--dim)">0 stars</span>
+        </div>
+        <div class="panel-body">
+          <div class="stars-list" id="stars-list">
+            <div class="empty-state" style="padding:1.2rem">
+              <div class="empty-icon">✦</div>
+              <div class="empty-label">No stars analyzed yet</div>
+            </div>
+          </div>
+          <div class="chip-actions">
+            <button class="btn btn-ghost btn-sm" onclick="loadPresets()">Load Presets</button>
+            <button class="btn btn-ghost btn-sm" onclick="shareLink()" title="Copy a link that contains this catalogue">⧉ Share Link</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearAll()">Clear All</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-area" id="results-area">
+      <!-- Persistent so the WebGL canvas (and its context) survives star switches -->
+      <div class="panel" id="visual-panel" hidden>
+        <div class="panel-header">
+          <span class="panel-title">Visual Render</span>
+          <div class="panel-tools">
+            <div class="seg" role="group" aria-label="View">
+              <button type="button" class="active" data-view="render" aria-pressed="true">Render</button>
+              <button type="button" data-view="size" aria-pressed="false">Size vs Sun</button>
+            </div>
+            <label class="seg-check" id="size-log-wrap" hidden><input type="checkbox" id="size-log"> Log scale</label>
+          </div>
+        </div>
+        <div class="star-canvas-wrap">
+          <canvas id="starCanvas" role="img" aria-label="Rendered star"></canvas>
+          <canvas id="starCanvas2d" hidden aria-hidden="true"></canvas>
+          <canvas id="sizeCanvas" hidden role="img" aria-label="Size comparison"></canvas>
+          <div class="star-canvas-mode" id="vis-mode" hidden></div>
+          <div class="star-canvas-name" id="vis-name"></div>
+          <div class="star-canvas-type" id="vis-type"></div>
+          <div class="star-canvas-hint" id="vis-hint"></div>
+          <div class="star-canvas-size" id="vis-size" title="True radius"></div>
+        </div>
+        <div class="evo-player" id="evo-player">
+          <div class="evo-row" id="evo-controls">
+            <button type="button" class="evo-play" id="evo-play" aria-label="Play evolution">▶</button>
+            <div class="evo-track">
+              <input type="range" class="evo-slider" id="evo-slider" min="0" max="1000" value="0" aria-label="Evolution time (not to scale)">
+              <div class="evo-ticks" id="evo-ticks"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="evo-now" title="Back to the star as entered">Now</button>
+          </div>
+          <div class="evo-unavail" id="evo-unavail" hidden>Already a stellar remnant — evolution playback starts from the main sequence.</div>
+          <div class="evo-readout" id="evo-readout"></div>
+        </div>
+        <div class="star-canvas-note">
+          <span>Colour and limb darkening are physically derived; surface texture is illustrative.</span>
+          <span class="hint-drag" id="vis-drag">Drag to rotate · scroll to zoom · on-screen size log-scaled</span>
+        </div>
+      </div>
+      <div class="results-area" id="results-body">
+        <div class="panel empty-state" style="min-height:280px;">
+          <div class="empty-icon">⊙</div>
+          <div class="empty-label">Analyze a star to see results</div>
+          <div class="empty-sub">Fill in the parameters on the left</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── H–R DIAGRAM ── -->
+<section id="hr" style="padding-top:0;">
+  <div class="section-header reveal">
+    <div class="section-tag">Population Module</div>
+    <h2 class="section-title">Hertzsprung–Russell Diagram</h2>
+  </div>
+  <div class="panel reveal reveal-d1">
+    <div class="panel-header">
+      <span class="panel-title">Luminosity vs Effective Temperature</span>
+      <span id="hr-count" style="font-family:var(--mono);font-size:0.58rem;color:var(--dim)">0 stars plotted</span>
+    </div>
+    <div class="chart-legend" id="hrLegend">
+      <div class="lg"><span class="swd" style="background:#ffd27d"></span>Registry stars (color = blackbody T<sub>eff</sub>)</div>
+      <div class="lg"><span class="sw" style="background:#566080;height:9px;width:9px;border-radius:50%"></span>Sun reference (G2V)</div>
+    </div>
+    <div class="chart-wrap" style="height:440px">
+      <canvas id="hrCanvas"></canvas>
+      <div class="chart-tooltip" id="hrTip"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SORT ── -->
+<section id="sort" style="padding-top:0;">
+  <div class="section-header reveal">
+    <div class="section-tag">Comparison Module</div>
+    <h2 class="section-title">Sort & Compare</h2>
+  </div>
+  <div class="sort-controls reveal reveal-d1">
+    <button class="sort-btn active" onclick="sortStars('L',this)">Luminosity ↓</button>
+    <button class="sort-btn" onclick="sortStars('T',this)">Temperature ↓</button>
+    <button class="sort-btn" onclick="sortStars('schw_R',this)">Schwarzschild R ↓</button>
+    <button class="sort-btn" onclick="sortStars('redshift_F',this)">Redshift ↑</button>
+    <button class="sort-btn" onclick="sortStars('lambda',this)">Peak λ ↓</button>
+  </div>
+  <div class="panel reveal reveal-d2">
+    <div class="panel-header">
+      <span class="panel-title">Stellar Comparison Table</span>
+      <span style="display:flex;align-items:center;gap:0.8rem;">
+        <a href="#" onclick="exportCSV();return false;" style="font-family:var(--mono);font-size:0.58rem;color:var(--cyan);text-decoration:none;letter-spacing:0.1em;">⭳ EXPORT CSV</a>
+        <span id="table-count" style="font-family:var(--mono);font-size:0.58rem;color:var(--dim)">0 entries</span>
+      </span>
+    </div>
+    <div class="table-scroll">
+      <table class="star-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Class</th>
+            <th>Temp (K)</th>
+            <th>Luminosity (W)</th>
+            <th>Peak λ (nm)</th>
+            <th>Flux (W/m²)</th>
+            <th>Schw. R (m)</th>
+            <th>Redshift</th>
+            <th>Remnant</th>
+            <th>Color</th>
+          </tr>
+        </thead>
+        <tbody id="star-tbody">
+          <tr>
+            <td colspan="10" style="text-align:center;color:var(--muted);padding:2.5rem;font-size:0.7rem;">
+              No stars analyzed yet — add stars above
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel reveal reveal-d2" id="compare-panel" style="margin-top:1.5rem;">
+    <div class="panel-header">
+      <span class="panel-title">Side-by-Side Comparison</span>
+      <div class="panel-dots"><span></span><span></span><span></span></div>
+    </div>
+    <div class="compare-pickers">
+      <div class="field"><label for="cmp-a">Star A</label><select id="cmp-a"></select></div>
+      <div class="field"><label for="cmp-b">Star B</label><select id="cmp-b"></select></div>
+    </div>
+    <div id="compare-body" hidden>
+      <div class="compare-render">
+        <canvas id="cmpCanvas" role="img" aria-label="Side-by-side render"></canvas>
+        <div class="compare-fallback" id="cmpFallback" hidden><canvas id="cmp2dA"></canvas><canvas id="cmp2dB"></canvas></div>
+        <div class="star-canvas-name" id="cmp-name-a"></div>
+        <div class="star-canvas-name cmp-right" id="cmp-name-b"></div>
+        <div class="star-canvas-size cmp-left" id="cmp-size-a"></div>
+        <div class="star-canvas-size" id="cmp-size-b"></div>
+      </div>
+      <div class="compare-cols">
+        <div class="compare-col">
+          <div class="chart-legend" id="cmp-legend-a"></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="cmpSpecA"></canvas><div class="chart-tooltip" id="cmpTipA"></div></div>
+          <div class="compare-stats" id="cmp-stats-a"></div>
+        </div>
+        <div class="compare-col">
+          <div class="chart-legend" id="cmp-legend-b"></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="cmpSpecB"></canvas><div class="chart-tooltip" id="cmpTipB"></div></div>
+          <div class="compare-stats" id="cmp-stats-b"></div>
+        </div>
+      </div>
+      <div class="star-canvas-note">
+        <span>Colour and limb darkening are physically derived; surface texture is illustrative.</span>
+        <span class="hint-drag">Each render log-scaled · drag to rotate both</span>
+      </div>
+    </div>
+    <div class="empty-state" id="compare-empty" style="padding:2rem">
+      <div class="empty-label">Add at least two stars to compare</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ABOUT ── -->
+<section class="about-section" id="about">
+  <div class="about-grid reveal">
+    <div class="about-text">
+      <div class="section-tag">About this project</div>
+      <h2 class="section-title" style="margin-bottom:1.2rem;">Physics Engine</h2>
+      <p>A web interface for a C++ stellar physics engine. Computes real astrophysical quantities using Stefan–Boltzmann law, Wien's displacement law, and Schwarzschild general relativistic effects.</p>
+      <p>The gravitational redshift factor √(1 − rₛ/R) determines photon escape conditions. Stellar evolution uses mass-luminosity relations to estimate lifetimes across three recursive stages.</p>
+      <p>Updated v3 adds Planck-law emission spectra, a live Hertzsprung–Russell diagram, Morgan–Keenan spectral classification, bolometric magnitudes, and physically accurate blackbody color — computed with CODATA 2018 / IAU 2015 nominal constants.</p>
+      <p>v4 renders each star in WebGL from its computed properties — CIE 1931 blackbody colour, temperature-dependent limb darkening, gravity-scaled convection cells, starspots, pulsar beams and a Doppler-beamed accretion disk — with evolution playback, true-scale size comparison and side-by-side compare.</p>
+      <div style="margin-top:1.2rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <a href="#" class="btn btn-primary btn-sm" id="aboutGithub" target="_blank" rel="noopener">⬡ GitHub Repository</a>
+        <a href="#analyzer" class="btn btn-ghost btn-sm">▶ Try Analyzer</a>
+      </div>
+    </div>
+    <div class="code-block reveal reveal-d1"><span class="c-cm">// Stefan-Boltzmann + Wien's law</span>
+<span class="c-ty">void</span> <span class="c-fn">analyzeStar</span>(Star &s){
+  s.L=<span class="c-nu">4</span>*pi*s.R*s.R*sigma*<span class="c-fn">pow</span>(s.T,<span class="c-nu">4</span>);
+  s.lambda=b/s.T;
+  s.F=s.L/(<span class="c-nu">4</span>*pi*s.d*s.d);
+  s.schw_R=(<span class="c-nu">2</span>*G*(s.i_mass*solar_mass))/(c*c);
+
+  <span class="c-cm">// Schwarzschild redshift (GR)</span>
+  <span class="c-kw">if</span>(s.R &lt;= s.schw_R)
+    s.status=<span class="c-st">"Black hole - no escape"</span>;
+  <span class="c-kw">else</span>
+    s.redshift_F=<span class="c-fn">sqrt</span>(<span class="c-nu">1.0</span>-(s.schw_R/s.R));
+}
+
+<span class="c-cm">// Fading Red Dwarf branch (v2)</span>
+<span class="c-kw">if</span>(s.i_mass &lt; <span class="c-nu">0.5</span>){
+  s.evo_status=<span class="c-st">"Fading Red Dwarf"</span>;
+  <span class="c-fn">evolve</span>(s, age, <span class="c-nu">2</span>); <span class="c-kw">return</span>;
+}
+</div>
+  </div>
+
+  <div class="features-grid reveal reveal-d1" style="margin-top:3rem;">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-name">Stefan–Boltzmann</div>
+      <div class="feature-desc">L = 4πR²σT⁴ — luminosity from surface area and temperature with full double precision.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌀</div>
+      <div class="feature-name">Gravitational Redshift</div>
+      <div class="feature-desc">Schwarzschild factor √(1 − rₛ/R) models photon energy loss escaping a gravitational well.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⏳</div>
+      <div class="feature-name">Stellar Evolution</div>
+      <div class="feature-desc">Recursive 3-stage timeline with Fading Red Dwarf, Red Giant, and Supergiant branches.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔬</div>
+      <div class="feature-name">Planck Spectra</div>
+      <div class="feature-desc">Full B_λ(λ,T) spectral radiance curves with Wien peak, rendered over the true-color visible band.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📡</div>
+      <div class="feature-name">Flux & Pressure</div>
+      <div class="feature-desc">F = L/(4πd²) and P = F/c with detection threshold classification.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔀</div>
+      <div class="feature-name">H–R Diagram & Export</div>
+      <div class="feature-desc">Every star plotted live on a Hertzsprung–Russell diagram, with CSV export and a persistent registry.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-logo">Stellar Observatory · v4.0</div>
+  <div class="footer-links">
+    <a href="#analyzer">Analyzer</a>
+    <a href="#sort">Compare</a>
+    <a href="#about">About</a>
+    <a href="#" id="footerGithub" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <div class="footer-copy">Built with physics.</div>
+</footer>
+
+</div><!-- .page -->
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  PI, B_WIEN, SOLAR_L, SOLAR_T, SOLAR_R, EARTH_R,
+  planck, kelvinToHex, waveRGB, rgbHex,
+  analyzeStar, classifier, msLifetime, buildEvoStages, fmtAge,
+} from './js/physics.js';
+import {
+  PRESETS, escapeHTML, csvField, sanitizeEntries,
+  RADIUS_UNITS, DISTANCE_UNITS, toSI, encodeShare, decodeShare,
+} from './js/catalogue.js';
+import { visualParams, screenRadiusPx, objectKind, trueSizeLabel } from './js/star-visuals.js';
+import { buildTrack } from './js/evolution.js';
+
+/* ════════════════════════════════════════
+   GITHUB URL — change this one line
+════════════════════════════════════════ */
+const GITHUB_URL = 'https://github.com/copyrocket7-cpu/AE_Space007';
+
+// Wire all github buttons
+['navGithub','heroGithub','aboutGithub','mobileGithub','footerGithub'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.href = GITHUB_URL;
+});
+
+/* ════════════════════════════════════════
+   STARFIELD
+════════════════════════════════════════ */
+const sfCanvas = document.getElementById('starfield');
+const sfCtx = sfCanvas.getContext('2d');
+let SF = [], nebulae = [], W, H, mx = 0, my = 0, raf = 0;
+
+function resize() {
+  W = sfCanvas.width = window.innerWidth;
+  H = sfCanvas.height = window.innerHeight;
+  buildStars();
+}
+
+function buildStars() {
+  SF = [];
+  nebulae = [];
+  const n = Math.min(Math.floor(W * H / 2800), 400);
+  for (let i = 0; i < n; i++) {
+    SF.push({
+      x: Math.random() * W, y: Math.random() * H,
+      r: Math.random() * 1.6 + 0.2,
+      base: Math.random() * 0.65 + 0.35,
+      speed: Math.random() * 0.015 + 0.004,
+      phase: Math.random() * Math.PI * 2,
+      color: starColor(),
+      pf: Math.random() * 0.018,
+    });
+  }
+  for (let i = 0; i < 3; i++) {
+    nebulae.push({
+      x: Math.random() * W, y: Math.random() * H,
+      r: Math.random() * 180 + 80,
+      h: [210, 250, 175][i],
+      a: Math.random() * 0.035 + 0.008,
+    });
+  }
+}
+
+function starColor() {
+  const r = Math.random();
+  if (r < 0.05) return '#a0c0ff';
+  if (r < 0.15) return '#ccdcff';
+  if (r < 0.35) return '#fff8e0';
+  if (r < 0.6)  return '#ffe0a0';
+  return '#ff9060';
+}
+
+let t = 0;
+function drawSF() {
+  sfCtx.clearRect(0, 0, W, H);
+  t += 0.006;
+  const px = (mx / W - 0.5) * 12, py = (my / H - 0.5) * 12;
+
+  nebulae.forEach(n => {
+    const g = sfCtx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+    g.addColorStop(0, `hsla(${n.h},75%,55%,${n.a})`);
+    g.addColorStop(1, 'transparent');
+    sfCtx.fillStyle = g;
+    sfCtx.beginPath();
+    sfCtx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+    sfCtx.fill();
+  });
+
+  SF.forEach(s => {
+    const a = s.base * (0.65 + 0.35 * Math.sin(t * s.speed * 100 + s.phase));
+    const cx = s.x + px * s.pf * 50;
+    const cy = s.y + py * s.pf * 50;
+
+    if (s.r > 1.1) {
+      const gw = sfCtx.createRadialGradient(cx, cy, 0, cx, cy, s.r * 4.5);
+      gw.addColorStop(0, s.color + '55');
+      gw.addColorStop(1, 'transparent');
+      sfCtx.fillStyle = gw;
+      sfCtx.beginPath();
+      sfCtx.arc(cx, cy, s.r * 4.5, 0, Math.PI*2);
+      sfCtx.fill();
+      // Diffraction spikes
+      sfCtx.globalAlpha = a * 0.25;
+      sfCtx.strokeStyle = s.color;
+      sfCtx.lineWidth = 0.5;
+      sfCtx.beginPath();
+      sfCtx.moveTo(cx - s.r*5.5, cy); sfCtx.lineTo(cx + s.r*5.5, cy);
+      sfCtx.moveTo(cx, cy - s.r*5.5); sfCtx.lineTo(cx, cy + s.r*5.5);
+      sfCtx.stroke();
+      sfCtx.globalAlpha = 1;
+    }
+
+    sfCtx.globalAlpha = a;
+    sfCtx.fillStyle = s.color;
+    sfCtx.beginPath();
+    sfCtx.arc(cx, cy, s.r, 0, Math.PI*2);
+    sfCtx.fill();
+    sfCtx.globalAlpha = 1;
+  });
+
+  requestAnimationFrame(drawSF);
+}
+
+window.addEventListener('resize', resize);
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+document.addEventListener('touchmove', e => {
+  if (e.touches[0]) { mx = e.touches[0].clientX; my = e.touches[0].clientY; }
+}, { passive: true });
+resize();
+drawSF();
+
+/* ════════════════════════════════════════
+   NAV
+════════════════════════════════════════ */
+const navEl = document.getElementById('nav');
+window.addEventListener('scroll', () => navEl.classList.toggle('compact', window.scrollY > 60));
+
+const hamburger = document.getElementById('hamburger');
+const mobileNav = document.getElementById('mobileNav');
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('open');
+  mobileNav.classList.toggle('open');
+  document.body.style.overflow = mobileNav.classList.contains('open') ? 'hidden' : '';
+});
+function closeMobileNav() {
+  hamburger.classList.remove('open');
+  mobileNav.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ════════════════════════════════════════
+   PHYSICS — display helpers
+   (the engine itself lives in js/physics.js)
+════════════════════════════════════════ */
+function getColor(lambda) {
+  const nm = lambda * 1e9;
+  if (nm < 10)  return { label: 'X-ray',       hex: '#c9b8ff' };
+  if (nm < 380) return { label: 'Ultraviolet', hex: '#9a6bff' };
+  if (nm <= 750) {
+    const [r, g, b] = waveRGB(nm);
+    const label = nm < 450 ? 'Violet' : nm < 485 ? 'Blue' : nm < 500 ? 'Cyan'
+                : nm < 565 ? 'Green'  : nm < 590 ? 'Yellow' : nm < 625 ? 'Orange' : 'Red';
+    return { label, hex: rgbHex(r, g, b) };
+  }
+  return { label: 'Infrared', hex: '#ff5030' };
+}
+
+const REMNANT_COLORS = {
+  'White Dwarf':             { b: '#a0c0ff', t: '#a0c0ff', bg: 'rgba(160,192,255,0.08)' },
+  'Neutron Star':            { b: '#f0a830', t: '#f0a830', bg: 'rgba(240,168,48,0.08)' },
+  'Black Hole':              { b: '#ff4455', t: '#ff4455', bg: 'rgba(255,68,85,0.08)' },
+  'Eternal — outlives universe': { b: '#00e888', t: '#00e888', bg: 'rgba(0,232,136,0.08)' },
+};
+function rc(r) { return REMNANT_COLORS[r] || { b: 'var(--cyan)', t: 'var(--cyan)', bg: 'transparent' }; }
+
+function fmtSci(n) {
+  if (!isFinite(n) || n === 0) return '0';
+  let e = Math.floor(Math.log10(Math.abs(n)));
+  let m = n / Math.pow(10, e);
+  if (Math.abs(m) >= 9.995) { m /= 10; e += 1; } // keep mantissa in [1, 10)
+  if (e === 0) return m.toFixed(2);
+  return `${m.toFixed(2)}×10<sup>${e}</sup>`;
+}
+
+/* ════════════════════════════════════════
+   STAR CANVAS RENDERER
+   WebGL (js/star-renderer.js, loaded on demand) with the v3 2D canvas as fallback
+════════════════════════════════════════ */
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Temperatures span 10⁻¹⁴ K (Hawking) to 10⁶ K — keep them readable
+function fmtT(T) {
+  return T >= 1 && T < 1e8 ? Math.round(T).toLocaleString() : T.toExponential(2);
+}
+// Peak wavelength: nm for ordinary stars, metres once it leaves the IR
+function fmtPeakText(lam) {
+  const nm = lam * 1e9;
+  if (nm >= 1e6) return lam.toExponential(2) + ' m';
+  return (nm >= 1 ? nm.toFixed(1) : nm.toPrecision(3)) + ' nm';
+}
+let stage = null;
+let stageState = 'idle';   // idle → loading → ready | failed
+let visualStar = null;
+
+let webglOK = null;
+function hasWebGL() {
+  if (webglOK !== null) return webglOK;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    gl?.getExtension('WEBGL_lose_context')?.loseContext(); // release the probe context
+    webglOK = !!gl;
+  } catch { webglOK = false; }
+  return webglOK;
+}
+
+// Create a StarStage on `canvas`, or null when WebGL / the CDN module is unavailable
+async function createStage(canvas, opts = {}) {
+  if (!hasWebGL()) return null;
+  try {
+    const { StarStage } = await import('./js/star-renderer.js');
+    return new StarStage(canvas, { reducedMotion, ...opts });
+  } catch (e) {
+    console.warn('WebGL star renderer unavailable — using 2D fallback.', e);
+    return null;
+  }
+}
+
+async function initStage() {
+  if (stageState !== 'idle') return;
+  stageState = 'loading';
+  stage = await createStage(document.getElementById('starCanvas'), {
+    onContextLost: () => { stage = null; stageState = 'failed'; refreshVisual(); },
+  });
+  stageState = stage ? 'ready' : 'failed';
+  refreshVisual();
+}
+
+let visMode = 'render';   // 'render' | 'size'
+
+function showVisual(star) {
+  const changed = star !== visualStar;
+  visualStar = star;
+  document.getElementById('visual-panel').hidden = !star;
+  if (!star) { evoPause(); return; }
+  if (changed) setupEvolution(star);
+  refreshVisual();
+}
+
+// The object currently on screen: the star itself, or its evolution-preview state
+function displayStar() {
+  return evo.active ? evoState(evo.f).s : visualStar;
+}
+
+function refreshVisual() {
+  if (!visualStar) return;
+  const star = displayStar();
+  const vp = visualParams(star);
+  const rCol = rc(visualStar.r_type);
+  const type = document.getElementById('vis-type');
+  document.getElementById('vis-name').textContent = visualStar.name;
+  type.textContent = visualStar.r_type;
+  type.style.color = rCol.t;
+  type.style.borderColor = rCol.b + '30';
+  document.getElementById('vis-size').textContent = vp.sizeLabel;
+  const sizeMode = visMode === 'size';
+  const logSize = document.getElementById('size-log').checked;
+  document.getElementById('vis-hint').textContent = sizeMode
+    ? (logSize ? 'Log scale — radius ∝ log R' : 'True relative scale')
+    : vp.kind === 'blackhole' ? 'Event horizon (Schwarzschild radius) · red dashed'
+    : vp.schwRatio * vp.screenPx > 0.5 ? 'Schwarzschild radius · red dashed' : '';
+  const mode = document.getElementById('vis-mode');
+  mode.hidden = !evo.active;
+  if (evo.active) mode.textContent = 'Evolution preview · approximate';
+
+  const c3 = document.getElementById('starCanvas'), c2 = document.getElementById('starCanvas2d');
+  const cs = document.getElementById('sizeCanvas');
+  c3.setAttribute('aria-label', `Rendered view of ${visualStar.name}: ${star.spec}, ${vp.sizeLabel}`);
+  const use2D = stageState === 'failed';
+  c3.hidden = use2D || sizeMode;
+  c2.hidden = !use2D || sizeMode;
+  cs.hidden = !sizeMode;
+  document.getElementById('vis-drag').textContent = sizeMode
+    ? (logSize ? 'Sizes compressed logarithmically' : 'Sizes to true scale — tiny objects are marked')
+    : use2D ? 'WebGL unavailable — 2D preview · on-screen size log-scaled'
+    : 'Drag to rotate · scroll to zoom · on-screen size log-scaled';
+
+  if (sizeMode) drawSizeComparison(star, cs, logSize);
+  else if (stageState === 'ready') stage.setStars([vp]);
+  else if (use2D) drawStarVisual2D(star, c2);
+  else initStage();
+  updateEvoReadout();
+}
+
+function setVisMode(m) {
+  visMode = m;
+  document.querySelectorAll('#visual-panel .seg button').forEach(b => {
+    const on = b.dataset.view === m;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on);
+  });
+  document.getElementById('size-log-wrap').hidden = m !== 'size';
+  refreshVisual();
+}
+
+/* ════════════════════════════════════════
+   SIZE COMPARISON (2D, true relative scale or log)
+════════════════════════════════════════ */
+function fmtRadius(R) {
+  const rr = R / SOLAR_R;
+  if (rr >= 0.05) return (rr >= 100 ? Math.round(rr).toLocaleString() : rr.toPrecision(3)) + ' R☉';
+  const km = R / 1000;
+  return (km >= 100 ? Math.round(km).toLocaleString() : km.toPrecision(3)) + ' km';
+}
+
+function drawSizeComparison(star, canvas, log) {
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+  const kind = objectKind(star);
+  const bh = kind === 'blackhole';
+  const mainR = bh ? star.schw_R : star.R;
+  const items = [{ name: star.name, R: mainR, color: star.bb, bh, main: true }];
+  const isSun = Math.abs(star.R / SOLAR_R - 1) < 0.01 && Math.abs(star.T - SOLAR_T) < 50;
+  if (!isSun) items.push({ name: 'Sun', R: SOLAR_R, color: kelvinToHex(SOLAR_T) });
+  if (mainR < 1.5 * SOLAR_R) items.push({ name: 'Earth', R: EARTH_R, color: '#4f86d9' });
+  items.sort((a, b) => b.R - a.R);
+
+  const cy = h * 0.45;
+  const maxPx = Math.min(h * 0.3, (w / items.length) * 0.36);
+  const minLogPx = 7;
+  const lMax = Math.log10(items[0].R), lMin = Math.log10(items[items.length - 1].R);
+  const px = it => log
+    ? (lMax === lMin ? maxPx : minLogPx + (Math.log10(it.R) - lMin) / (lMax - lMin) * (maxPx - minLogPx))
+    : maxPx * it.R / items[0].R;
+
+  const slots = items.map(it => Math.max(px(it), 22) * 2);
+  const gap = Math.max(18, (w - slots.reduce((a, b) => a + b, 0)) / (items.length + 1));
+  let x = gap, tooSmall = false;
+  ctx.textAlign = 'center';
+  items.forEach((it, i) => {
+    const r = px(it), cx = x + slots[i] / 2;
+    x += slots[i] + gap;
+    if (r >= 0.75) {
+      if (it.bh) {
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,170,80,0.85)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, PI * 2); ctx.stroke();
+      } else {
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, it.color); g.addColorStop(0.75, it.color); g.addColorStop(1, it.color + 'a0');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, PI * 2); ctx.fill();
+      }
+    } else {
+      // Too small to draw at this scale: a marker so it can still be found
+      ctx.fillStyle = it.bh ? '#ffaa50' : it.color;
+      ctx.beginPath(); ctx.arc(cx, cy, 1.2, 0, PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,212,232,0.6)'; ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.arc(cx, cy, 9, 0, PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const ly = cy + Math.max(r, 12) + 16;
+    ctx.font = '600 11px Outfit, sans-serif';
+    ctx.fillStyle = it.main ? '#eef2ff' : '#b8c8e8';
+    ctx.fillText(it.name, cx, ly);
+    ctx.font = '9px "Space Mono", monospace';
+    ctx.fillStyle = AXIS_TEXT;
+    ctx.fillText((it.bh ? 'horizon ' : '') + fmtRadius(it.R), cx, ly + 13);
+    if (r < 0.75) tooSmall = true;
+  });
+  if (!log && items.length > 1) {
+    const ratio = items[0].R / items[items.length - 1].R;
+    ctx.font = '9px "Space Mono", monospace';
+    ctx.fillStyle = AXIS_TEXT;
+    ctx.textAlign = 'left';
+    ctx.fillText(`largest / smallest = ${ratio >= 1000 ? ratio.toExponential(2) : ratio.toPrecision(3)}×`, 16, 52);
+    if (tooSmall) ctx.fillText('◌ dashed marker = too small to see at this scale', 16, 65);
+  }
+}
+
+/* ════════════════════════════════════════
+   EVOLUTION PLAYBACK (approximate track, js/evolution.js)
+════════════════════════════════════════ */
+const evo = { star: null, track: null, f: 0, active: false, playing: false, raf: 0, last: 0 };
+const EVO_SECONDS = 14;   // full track duration while playing
+
+function setupEvolution(star) {
+  evoPause();
+  evo.star = star;
+  evo.active = false;
+  evo.f = 0;
+  const ok = objectKind(star) === 'star';
+  evo.track = ok ? buildTrack(star) : null;
+  document.getElementById('evo-controls').hidden = !ok;
+  document.getElementById('evo-unavail').hidden = ok;
+  document.getElementById('evo-slider').value = 0;
+  document.getElementById('evo-ticks').innerHTML = ok
+    ? evo.track.stages.map(st => st.from > 0.7
+        ? `<span class="end" style="left:100%">${escapeHTML(st.name)}</span>`   // keep the last label inside the track
+        : `<span style="left:${(st.from * 100).toFixed(1)}%">${escapeHTML(st.name)}</span>`).join('')
+    : '';
+}
+
+function evoState(f) {
+  const st = evo.track.at(f);
+  const s = { name: evo.star.name, R: st.R, T: st.T, d: evo.star.d, i_mass: st.mass };
+  analyzeStar(s); classifier(s);
+  return { s, st };
+}
+
+function evoSet(f) {
+  if (!evo.track) return;
+  evo.f = Math.max(0, Math.min(1, f));
+  evo.active = true;
+  document.getElementById('evo-slider').value = Math.round(evo.f * 1000);
+  refreshVisual();
+}
+
+function updateEvoReadout() {
+  const out = document.getElementById('evo-readout');
+  const stages = document.querySelectorAll('#results-body .evo-stage');
+  if (!evo.track) { out.textContent = ''; stages.forEach(el => el.classList.remove('current')); return; }
+  if (!evo.active) {
+    out.textContent = 'Drag the slider or press ▶ to preview this star’s life (approximate track, time not to scale).';
+    stages.forEach(el => el.classList.remove('current'));
+    return;
+  }
+  const { s, st } = evoState(evo.f);
+  const kind = objectKind(s);
+  const size = kind === 'blackhole' ? trueSizeLabel(s, kind) : fmtRadius(s.R);
+  out.textContent = `${st.label} · ~${size} · ~${fmtT(s.T)} K · age ≈ ${fmtAge(st.ageMyr)}`;
+  stages.forEach((el, i) => el.classList.toggle('current', i === st.stageIndex));
+}
+
+function evoPlay() {
+  if (!evo.track) return;
+  if (reducedMotion) {
+    // No animation: step to the middle of the next stage
+    const next = evo.track.stages.find(st => st.from > evo.f + 1e-6);
+    const target = next ? (next.from + next.to) / 2 : 0.25;
+    evoSet(evo.active ? target : 0.25);
+    return;
+  }
+  if (evo.f >= 1) evo.f = 0;
+  evo.playing = true;
+  const btn = document.getElementById('evo-play');
+  btn.textContent = '❚❚'; btn.setAttribute('aria-label', 'Pause evolution');
+  evo.last = performance.now();
+  const step = now => {
+    if (!evo.playing) return;
+    const dt = Math.min((now - evo.last) / 1000, 0.1);
+    evo.last = now;
+    evoSet(evo.f + dt / EVO_SECONDS);
+    if (evo.f >= 1) { evoPause(); return; }
+    evo.raf = requestAnimationFrame(step);
+  };
+  evo.raf = requestAnimationFrame(step);
+}
+
+function evoPause() {
+  evo.playing = false;
+  cancelAnimationFrame(evo.raf);
+  const btn = document.getElementById('evo-play');
+  btn.textContent = '▶'; btn.setAttribute('aria-label', 'Play evolution');
+}
+
+function evoReset() {
+  evoPause();
+  evo.active = false;
+  evo.f = 0;
+  document.getElementById('evo-slider').value = 0;
+  refreshVisual();
+}
+
+function drawStarVisual2D(star, canvas) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = w; canvas.height = h;
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  // Render in true blackbody color so the star looks the way a camera would see it
+  const col = { hex: star.bb || getColor(star.lambda).hex };
+
+  // Black hole
+  if (star.R <= star.schw_R) {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 90);
+    g.addColorStop(0, '#000');
+    g.addColorStop(0.65, 'rgba(255,100,20,0.35)');
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, 90, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,160,30,0.55)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(cx, cy, 100, 22, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(cx, cy, 32, 0, Math.PI*2); ctx.fill();
+    return;
+  }
+
+  const vr = screenRadiusPx(star.R);
+
+  // Outer glow
+  const g1 = ctx.createRadialGradient(cx, cy, vr * 0.6, cx, cy, vr * 3.8);
+  g1.addColorStop(0, col.hex + '35'); g1.addColorStop(1, 'transparent');
+  ctx.fillStyle = g1;
+  ctx.beginPath(); ctx.arc(cx, cy, vr * 3.8, 0, Math.PI*2); ctx.fill();
+
+  // Mid glow
+  const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, vr * 1.9);
+  g2.addColorStop(0, col.hex + 'bb'); g2.addColorStop(0.5, col.hex + '50'); g2.addColorStop(1, 'transparent');
+  ctx.fillStyle = g2;
+  ctx.beginPath(); ctx.arc(cx, cy, vr * 1.9, 0, Math.PI*2); ctx.fill();
+
+  // Body
+  const g3 = ctx.createRadialGradient(cx - vr*0.25, cy - vr*0.25, 0, cx, cy, vr);
+  g3.addColorStop(0, '#ffffff'); g3.addColorStop(0.35, col.hex); g3.addColorStop(1, col.hex + '70');
+  ctx.fillStyle = g3;
+  ctx.beginPath(); ctx.arc(cx, cy, vr, 0, Math.PI*2); ctx.fill();
+
+  // Spikes
+  ctx.strokeStyle = col.hex + '50'; ctx.lineWidth = 0.8;
+  for (let a = 0; a < 4; a++) {
+    const ang = (a * Math.PI) / 4;
+    [[1,1],[-1,-1]].forEach(([s1,s2]) => {
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang)*vr*s1, cy + Math.sin(ang)*vr*s1);
+      ctx.lineTo(cx + Math.cos(ang)*vr*4.5*s1, cy + Math.sin(ang)*vr*4.5*s1);
+      ctx.stroke();
+    });
+  }
+
+  // Schwarzschild dashed ring
+  const sr = (star.schw_R / star.R) * vr;
+  if (sr > 0.5) {
+    ctx.strokeStyle = 'rgba(255,68,85,0.45)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,4]);
+    ctx.beginPath(); ctx.arc(cx, cy, Math.max(sr, 2), 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+/* ════════════════════════════════════════
+   CHART ENGINE — shared helpers
+════════════════════════════════════════ */
+const GRID_COLOR = 'rgba(120,150,220,0.08)';
+const AXIS_TEXT  = '#566080';
+const SURFACE    = '#04060d';
+
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
+function fmtWl(nm) {
+  if (nm >= 1e12) return '1e' + Math.round(Math.log10(nm * 1e-9)) + ' m';
+  if (nm >= 1e9) return (nm / 1e9) + ' m';
+  if (nm >= 1e6) return (nm / 1e6) + ' mm';
+  if (nm >= 1000) return (nm / 1000) + ' µm';
+  if (nm >= 1) return nm + ' nm';
+  return nm.toPrecision(2) + ' nm';
+}
+
+/* ════════════════════════════════════════
+   PLANCK SPECTRUM CHART
+════════════════════════════════════════ */
+const SUN_REF = { T: SOLAR_T, color: '#566080', name: 'Sun' };
+
+// opts: { canvas, ref: { T, color, name } } — defaults to the main chart with the Sun as reference
+function drawSpectrum(star, hoverX, opts = {}) {
+  const canvas = opts.canvas || document.getElementById('specCanvas');
+  const ref = opts.ref || SUN_REF;
+  if (!canvas || !canvas.offsetWidth) return;
+  const { ctx, w, h } = setupCanvas(canvas);
+  const pad = { l: 40, r: 18, t: 16, b: 34 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  const peak = star.lambda;
+  const lamMin = Math.min(100e-9, peak / 8);
+  const lamMax = Math.max(1700e-9, peak * 9);
+  const logMin = Math.log10(lamMin), logMax = Math.log10(lamMax);
+  const lx = lam => pad.l + (Math.log10(lam) - logMin) / (logMax - logMin) * pw;
+  const xlam = x => Math.pow(10, logMin + (x - pad.l) / pw * (logMax - logMin));
+  const ly = v => pad.t + (1 - v) * ph;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Physically-colored visible band (380–750 nm)
+  for (let nm = 380; nm <= 750; nm += 2) {
+    const lam = nm * 1e-9;
+    if (lam < lamMin || lam > lamMax) continue;
+    const x0 = lx(lam), x1 = lx((nm + 2) * 1e-9);
+    const [r, g, b] = waveRGB(nm);
+    ctx.fillStyle = `rgba(${r},${g},${b},0.13)`;
+    ctx.fillRect(x0, pad.t, Math.max(x1 - x0, 0.5), ph);
+  }
+
+  // Horizontal gridlines — solid hairlines
+  ctx.strokeStyle = GRID_COLOR;
+  ctx.lineWidth = 1;
+  [0.25, 0.5, 0.75, 1].forEach(v => {
+    ctx.beginPath();
+    ctx.moveTo(pad.l, ly(v)); ctx.lineTo(pad.l + pw, ly(v));
+    ctx.stroke();
+  });
+
+  // X ticks at decades
+  ctx.font = '9px "Space Mono", monospace';
+  ctx.fillStyle = AXIS_TEXT;
+  ctx.textAlign = 'center';
+  const decades = Math.floor(logMax) - Math.ceil(logMin) + 1;
+  const tickStep = Math.max(1, Math.ceil(decades / Math.max(3, Math.floor(pw / 70))));
+  for (let e = Math.ceil(logMin); e <= Math.floor(logMax); e += tickStep) {
+    const lam = Math.pow(10, e);
+    const x = lx(lam);
+    ctx.strokeStyle = GRID_COLOR;
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
+    ctx.fillText(fmtWl(lam * 1e9), x, h - 18);
+  }
+  ctx.fillText('wavelength λ (log scale)', pad.l + pw / 2, h - 5);
+
+  // Y axis label
+  ctx.save();
+  ctx.translate(11, pad.t + ph / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Bλ / Bλ,max', 0, 0);
+  ctx.restore();
+
+  // Curves — each normalized to its own peak so both shapes stay readable
+  const N = 260;
+  const drawCurve = (T, color, width) => {
+    const bMax = planck(B_WIEN / T, T);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const lam = Math.pow(10, logMin + (i / N) * (logMax - logMin));
+      const v = planck(lam, T) / bMax;
+      const x = lx(lam), y = ly(Math.max(0, Math.min(1, v)));
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+  drawCurve(ref.T, ref.color, 1.5);          // reference (Sun, or the other compared star)
+  drawCurve(star.T, star.bb || '#00d4e8', 2); // selected star
+
+  // Peak marker — dot with surface ring + direct label
+  const pxk = lx(peak), pyk = ly(1);
+  ctx.beginPath(); ctx.arc(pxk, pyk, 6, 0, PI * 2);
+  ctx.fillStyle = SURFACE; ctx.fill();
+  ctx.beginPath(); ctx.arc(pxk, pyk, 4, 0, PI * 2);
+  ctx.fillStyle = star.bb || '#00d4e8'; ctx.fill();
+  ctx.fillStyle = '#b8c8e8';
+  ctx.textAlign = pxk > pad.l + pw * 0.75 ? 'right' : 'left';
+  ctx.fillText(`λmax ${fmtPeakText(peak)}`,
+    pxk + (pxk > pad.l + pw * 0.75 ? -10 : 10), pyk + 4);
+
+  // Hover crosshair
+  if (hoverX != null && hoverX >= pad.l && hoverX <= pad.l + pw) {
+    const lam = xlam(hoverX);
+    const bMax = planck(B_WIEN / star.T, star.T);
+    const v = planck(lam, star.T) / bMax;
+    ctx.strokeStyle = 'rgba(184,200,232,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hoverX, pad.t); ctx.lineTo(hoverX, pad.t + ph); ctx.stroke();
+    const hy = ly(Math.max(0, Math.min(1, v)));
+    ctx.beginPath(); ctx.arc(hoverX, hy, 5.5, 0, PI * 2);
+    ctx.fillStyle = SURFACE; ctx.fill();
+    ctx.beginPath(); ctx.arc(hoverX, hy, 3.5, 0, PI * 2);
+    ctx.fillStyle = star.bb || '#00d4e8'; ctx.fill();
+    return { lam, b: planck(lam, star.T), bRef: planck(lam, ref.T), y: hy, pad, pw };
+  }
+  return null;
+}
+
+function wireSpectrumHover(star, opts = {}) {
+  const canvas = opts.canvas || document.getElementById('specCanvas');
+  const tip = opts.tip || document.getElementById('specTip');
+  const ref = opts.ref || SUN_REF;
+  if (!canvas || !tip) return;
+  const short = n => escapeHTML(n.length > 14 ? n.slice(0, 13) + '…' : n);
+  canvas.onmousemove = e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const hit = drawSpectrum(star, x, opts);
+    if (!hit) { tip.classList.remove('show'); return; }
+    tip.innerHTML =
+      `λ = ${fmtPeakText(hit.lam)}<br>` +
+      `Bλ(${short(star.name)}) = ${hit.b.toExponential(2)} W·sr⁻¹·m⁻³<br>` +
+      `Bλ(${short(ref.name)}) = ${hit.bRef.toExponential(2)} W·sr⁻¹·m⁻³`;
+    tip.classList.add('show');
+    const wrapW = canvas.offsetWidth;
+    tip.style.left = (x > wrapW - 210 ? x - tip.offsetWidth - 14 : x + 14) + 'px';
+    tip.style.top = Math.max(8, Math.min(hit.y - 20, canvas.offsetHeight - 70)) + 'px';
+  };
+  canvas.onmouseleave = () => {
+    tip.classList.remove('show');
+    drawSpectrum(star, null, opts);
+  };
+}
+
+/* ════════════════════════════════════════
+   HERTZSPRUNG–RUSSELL DIAGRAM
+════════════════════════════════════════ */
+const HR_T_MIN = 2200, HR_T_MAX = 48000;
+const HR_L_MIN = -6, HR_L_MAX = 7;
+let hrPoints = [];
+
+function drawHR(highlightIdx = -1) {
+  const canvas = document.getElementById('hrCanvas');
+  if (!canvas || !canvas.offsetWidth) return;
+  const { ctx, w, h } = setupCanvas(canvas);
+  const pad = { l: 52, r: 20, t: 30, b: 40 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const logTMin = Math.log10(HR_T_MIN), logTMax = Math.log10(HR_T_MAX);
+  // Temperature decreases to the right — astronomy convention
+  const tx = T => pad.l + (logTMax - Math.log10(Math.max(Math.min(T, HR_T_MAX), HR_T_MIN))) / (logTMax - logTMin) * pw;
+  const lyv = logL => pad.t + (HR_L_MAX - Math.max(Math.min(logL, HR_L_MAX), HR_L_MIN)) / (HR_L_MAX - HR_L_MIN) * ph;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = '9px "Space Mono", monospace';
+
+  // Spectral class bands along the top
+  const clsBounds = [
+    ['O', HR_T_MAX, 30000], ['B', 30000, 10000], ['A', 10000, 7500],
+    ['F', 7500, 6000], ['G', 6000, 5200], ['K', 5200, 3700], ['M', 3700, HR_T_MIN]
+  ];
+  clsBounds.forEach(([cls, hi, lo], i) => {
+    const x0 = tx(hi), x1 = tx(lo);
+    if (i > 0) {
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x0, pad.t); ctx.lineTo(x0, pad.t + ph); ctx.stroke();
+    }
+    ctx.fillStyle = kelvinToHex((hi + lo) / 2) + '99';
+    ctx.textAlign = 'center';
+    ctx.fillText(cls, (x0 + x1) / 2, pad.t - 8);
+  });
+
+  // Horizontal gridlines every 2 decades of luminosity
+  ctx.textAlign = 'right';
+  for (let e = HR_L_MIN; e <= HR_L_MAX; e += 2) {
+    const y = lyv(e);
+    ctx.strokeStyle = GRID_COLOR;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+    ctx.fillStyle = AXIS_TEXT;
+    if (e === 0) {
+      ctx.fillText('1', pad.l - 8, y + 3);
+    } else {
+      // "10" with a hand-placed raised exponent — superscript glyphs are unreliable at 9px
+      ctx.font = '7px "Space Mono", monospace';
+      ctx.fillText(String(e), pad.l - 8, y - 1);
+      const ew = ctx.measureText(String(e)).width;
+      ctx.font = '9px "Space Mono", monospace';
+      ctx.fillText('10', pad.l - 9 - ew, y + 3);
+    }
+  }
+
+  // X ticks
+  ctx.textAlign = 'center';
+  [40000, 20000, 10000, 5000, 3000].forEach(T => {
+    ctx.fillStyle = AXIS_TEXT;
+    ctx.fillText(T.toLocaleString(), tx(T), pad.t + ph + 16);
+  });
+  ctx.fillText('effective temperature (K) — decreasing →', pad.l + pw / 2, h - 6);
+  ctx.save();
+  ctx.translate(12, pad.t + ph / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('luminosity (L☉)', 0, 0);
+  ctx.restore();
+
+  // Main-sequence band: L/L☉ ≈ (T/T☉)^6.7, spread ~±1.2 dex
+  ctx.beginPath();
+  const msLogL = T => 6.7 * Math.log10(T / SOLAR_T);
+  let first = true;
+  for (let T = HR_T_MAX; T >= HR_T_MIN; T *= 0.97) {
+    const x = tx(T), y = lyv(msLogL(T) + 1.2);
+    first ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    first = false;
+  }
+  for (let T = HR_T_MIN; T <= HR_T_MAX; T *= 1.03) {
+    ctx.lineTo(tx(T), lyv(msLogL(T) - 1.2));
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,212,232,0.045)';
+  ctx.fill();
+
+  // Region labels
+  ctx.fillStyle = 'rgba(86,96,128,0.75)';
+  ctx.textAlign = 'center';
+  ctx.save();
+  ctx.translate(tx(9000), lyv(msLogL(9000)));
+  ctx.rotate(Math.atan2(lyv(msLogL(5000)) - lyv(msLogL(16000)), tx(5000) - tx(16000)));
+  ctx.fillText('M A I N   S E Q U E N C E', 0, -8);
+  ctx.restore();
+  ctx.fillText('G I A N T S', tx(4200), lyv(2.6));
+  ctx.fillText('S U P E R G I A N T S', tx(9500), lyv(5.4));
+  ctx.fillText('W H I T E   D W A R F S', tx(14000), lyv(-3.2));
+
+  // Sun reference
+  const sx = tx(SOLAR_T), sy = lyv(0);
+  ctx.strokeStyle = 'rgba(184,200,232,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(sx - 7, sy); ctx.lineTo(sx + 7, sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx, sy - 7); ctx.lineTo(sx, sy + 7); ctx.stroke();
+  ctx.fillStyle = AXIS_TEXT;
+  ctx.textAlign = 'left';
+  ctx.fillText('Sun', sx + 10, sy + 3);
+
+  // Registry stars
+  hrPoints = registry.map((s, i) => ({
+    x: tx(s.T), y: lyv(Math.log10(s.L / SOLAR_L)), s, i
+  }));
+  hrPoints.forEach(p => {
+    const r = p.i === highlightIdx ? 8 : 6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, PI * 2);
+    ctx.fillStyle = SURFACE; ctx.fill();          // 2px surface ring
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, PI * 2);
+    ctx.fillStyle = p.s.bb; ctx.fill();
+    if (p.i === highlightIdx) {
+      ctx.strokeStyle = 'rgba(238,242,255,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, PI * 2); ctx.stroke();
+    }
+  });
+  // Direct name labels while the registry is small
+  if (registry.length <= 14) {
+    ctx.fillStyle = '#b8c8e8';
+    hrPoints.forEach(p => {
+      const flip = p.x > pad.l + pw - 90;
+      ctx.textAlign = flip ? 'right' : 'left';
+      ctx.fillText(p.s.name, p.x + (flip ? -11 : 11), p.y + 3);
+    });
+  }
+
+  const el = document.getElementById('hr-count');
+  if (el) el.textContent = registry.length + ' star' + (registry.length !== 1 ? 's' : '') + ' plotted';
+}
+
+function wireHRHover() {
+  const canvas = document.getElementById('hrCanvas');
+  const tip = document.getElementById('hrTip');
+  if (!canvas || !tip) return;
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let best = null, bestD = 26; // generous hit radius
+    hrPoints.forEach(p => {
+      const d = Math.hypot(p.x - mx, p.y - my);
+      if (d < bestD) { bestD = d; best = p; }
+    });
+    if (!best) {
+      tip.classList.remove('show');
+      canvas.style.cursor = 'default';
+      drawHR();
+      return;
+    }
+    canvas.style.cursor = 'pointer';
+    drawHR(best.i);
+    const s = best.s;
+    tip.innerHTML =
+      `<span style="color:#eef2ff;font-weight:700">${escapeHTML(s.name)}</span> · ${s.spec}<br>` +
+      `T = ${fmtT(s.T)} K<br>` +
+      `L = ${(s.L / SOLAR_L).toExponential(2)} L☉<br>` +
+      `Fate: ${s.r_type}`;
+    tip.classList.add('show');
+    tip.style.left = (best.x > canvas.offsetWidth - 200 ? best.x - tip.offsetWidth - 16 : best.x + 16) + 'px';
+    tip.style.top = Math.max(8, best.y - 30) + 'px';
+  });
+  canvas.addEventListener('mouseleave', () => {
+    tip.classList.remove('show');
+    drawHR();
+  });
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const p = hrPoints.find(p => Math.hypot(p.x - mx, p.y - my) < 26);
+    if (p) {
+      selectStar(p.i);
+      document.getElementById('analyzer').scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+}
+
+/* ════════════════════════════════════════
+   RENDER RESULTS
+════════════════════════════════════════ */
+// EM spectrum bar: log scale, 1 nm → 1 mm (X-ray → UV → visible → IR)
+const EM_LOG_MIN = 0, EM_LOG_MAX = 6; // log10(nm)
+function emPct(nm) {
+  const p = (Math.log10(Math.max(nm, 1)) - EM_LOG_MIN) / (EM_LOG_MAX - EM_LOG_MIN) * 100;
+  return Math.max(0.5, Math.min(99.5, p));
+}
+function emGradient() {
+  const stops = [
+    `#141028 0%`, `#241448 ${emPct(10)}%`,          // X-ray → UV edge
+    `#40108a ${emPct(100)}%`, `#7b00d4 ${emPct(379)}%`  // UV ramp
+  ];
+  for (let nm = 380; nm <= 750; nm += 20) {
+    const [r, g, b] = waveRGB(nm);
+    stops.push(`${rgbHex(r, g, b)} ${emPct(nm)}%`);
+  }
+  stops.push(`#7a1408 ${emPct(760)}%`, `#38100a ${emPct(30000)}%`, `#0c0505 100%`);
+  return `linear-gradient(to right, ${stops.join(',')})`;
+}
+
+function fmtKms(ms) {
+  const kms = ms / 1000;
+  return kms >= 1e4 ? fmtSci(kms) : kms.toFixed(1);
+}
+
+function renderResults(star) {
+  const col = getColor(star.lambda);
+  const rCol = rc(star.r_type);
+  const detected = star.P > 1e-8;
+  const lamNm = star.lambda * 1e9;
+  const wlPct = emPct(lamNm);
+  const evoStages = buildEvoStages(star);
+  const msLife = msLifetime(star);
+
+  const html = `
+    <div class="data-grid">
+      <div class="data-cell">
+        <div class="data-cell-label">Luminosity</div>
+        <div class="data-cell-value">${fmtSci(star.L)}<span class="data-cell-unit">W</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Solar Luminosities</div>
+        <div class="data-cell-value">${fmtSci(star.L / SOLAR_L)}<span class="data-cell-unit">L☉</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Temperature</div>
+        <div class="data-cell-value">${fmtT(star.T)}<span class="data-cell-unit">K</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Spectral Class</div>
+        <div class="data-cell-value" style="display:flex;align-items:center;gap:0.45rem;">
+          <span style="width:9px;height:9px;border-radius:50%;background:${star.bb};box-shadow:0 0 6px ${star.bb};flex-shrink:0;"></span>${star.spec}
+        </div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Peak Wavelength</div>
+        <div class="data-cell-value">${lamNm >= 1e6 ? `${fmtSci(star.lambda)}<span class="data-cell-unit">m</span>` : `${lamNm >= 1 ? lamNm.toFixed(1) : lamNm.toPrecision(3)}<span class="data-cell-unit">nm</span>`}</div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Radiation Flux</div>
+        <div class="data-cell-value">${fmtSci(star.F)}<span class="data-cell-unit">W/m²</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Rad. Pressure</div>
+        <div class="data-cell-value">${fmtSci(star.P)}<span class="data-cell-unit">Pa</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Schwarzschild R</div>
+        <div class="data-cell-value">${fmtSci(star.schw_R)}<span class="data-cell-unit">m</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Redshift Factor</div>
+        <div class="data-cell-value">${star.redshift_F.toFixed(6)}</div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Observed Temp</div>
+        <div class="data-cell-value">${star.redshift_T.toFixed(1)}<span class="data-cell-unit">K</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Abs. Bol. Magnitude</div>
+        <div class="data-cell-value">${star.M_bol.toFixed(2)}<span class="data-cell-unit">M<sub>bol</sub></span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">App. Bol. Magnitude</div>
+        <div class="data-cell-value">${star.m_bol.toFixed(2)}<span class="data-cell-unit">m<sub>bol</sub></span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Surface Gravity</div>
+        <div class="data-cell-value">${star.logg.toFixed(2)}<span class="data-cell-unit">log g (cgs)</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Escape Velocity</div>
+        <div class="data-cell-value">${fmtKms(star.v_esc)}<span class="data-cell-unit">km/s</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">Habitable Zone</div>
+        <div class="data-cell-value">${star.hz_in.toPrecision(3)}–${star.hz_out.toPrecision(3)}<span class="data-cell-unit">AU</span></div>
+      </div>
+      <div class="data-cell">
+        <div class="data-cell-label">MS Lifetime</div>
+        <div class="data-cell-value">${fmtAge(msLife)}</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Planck Emission Spectrum — B<sub>λ</sub>(λ, T)</span>
+        <div class="panel-dots"><span></span><span></span><span></span></div>
+      </div>
+      <div class="chart-legend">
+        <div class="lg"><span class="sw" style="background:${star.bb}"></span>${escapeHTML(star.name)} · ${fmtT(star.T)} K</div>
+        <div class="lg"><span class="sw" style="background:#566080"></span>Sun reference · ${SOLAR_T.toLocaleString()} K</div>
+        <div class="lg" style="color:var(--muted)">curves normalized to own peak · hover for absolute B<sub>λ</sub></div>
+      </div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="specCanvas"></canvas>
+        <div class="chart-tooltip" id="specTip"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Status & Classification</span></div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:0.9rem;">
+        <div class="status-bar">
+          <div class="s-indicator">
+            <div class="s-dot" style="background:${col.hex}"></div>
+            <span style="color:${col.hex}">${col.label}</span>
+          </div>
+          <div class="s-indicator">
+            <div class="s-dot" style="background:${rCol.b}"></div>
+            <span style="color:${rCol.t}">${star.r_type}</span>
+          </div>
+          <div class="s-indicator">
+            <div class="s-dot" style="background:${detected ? 'var(--green)' : 'var(--muted)'}"></div>
+            <span style="color:${detected ? 'var(--green)' : 'var(--dim)'}">Flux: ${detected ? 'DETECTED' : 'Below threshold'}</span>
+          </div>
+          <div class="s-indicator" style="margin-left:auto;">
+            <span style="color:var(--dim);font-size:0.58rem;">${star.status}</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.55rem;color:var(--dim);margin-bottom:0.45rem;letter-spacing:0.1em;text-transform:uppercase;">
+            Peak λ on electromagnetic spectrum — ${fmtPeakText(star.lambda)} (log scale, 1 nm → 1 mm)
+          </div>
+          <div class="em-bar" style="background:${emGradient()}"><div class="em-marker" style="left:${wlPct}%"></div></div>
+          <div class="em-bands">
+            <span style="width:${emPct(10)}%">X-ray</span>
+            <span style="width:${emPct(380) - emPct(10)}%">Ultraviolet</span>
+            <span style="width:${emPct(750) - emPct(380)}%;text-align:center;">Vis</span>
+            <span style="flex:1;text-align:right;">Infrared</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Stellar Evolution Timeline</span>
+        ${objectKind(star) === 'star'
+          ? '<button type="button" class="panel-link" data-evo-preview>▶ PLAY ON RENDER</button>'
+          : '<span class="evo-approx">current remnant</span>'}
+      </div>
+      <div class="evo-timeline">
+        ${evoStages.map((stg, i) => `
+          <div class="evo-stage">
+            <div class="evo-dot-col">
+              <div class="evo-dot filled" style="${stg.final ? 'background:'+rCol.b+';border-color:'+rCol.b : ''}"></div>
+              ${i < evoStages.length - 1 ? '<div class="evo-connector"></div>' : ''}
+            </div>
+            <div class="evo-content">
+              <div class="evo-num">${stg.num}</div>
+              <div class="evo-name" style="${stg.final ? 'color:'+rCol.t : ''}">${stg.name}</div>
+              <div class="evo-age">${stg.age}</div>
+              ${stg.detail ? `<div class="evo-detail">${stg.detail}</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('results-body').innerHTML = html;
+  showVisual(star);
+  requestAnimationFrame(() => {
+    drawSpectrum(star);
+    wireSpectrumHover(star);
+  });
+}
+
+/* ════════════════════════════════════════
+   REGISTRY STATE
+════════════════════════════════════════ */
+let registry = [];
+let selectedIdx = -1;
+let sortKey = 'L';
+
+function addStar() {
+  const name   = document.getElementById('inp-name').value.trim() || 'Unknown Star';
+  const rIn    = parseFloat(document.getElementById('inp-radius').value);
+  const T      = parseFloat(document.getElementById('inp-temp').value);
+  const dIn    = parseFloat(document.getElementById('inp-dist').value);
+  const i_mass = parseFloat(document.getElementById('inp-mass').value);
+
+  if ([rIn, T, dIn, i_mass].some(v => !Number.isFinite(v) || v <= 0)) {
+    toast('⚠ Fill all fields with positive numbers'); return;
+  }
+  // The engine works in SI; convert from the chosen display units
+  const R = toSI(rIn, document.getElementById('unit-radius').value, RADIUS_UNITS);
+  const d = toSI(dIn, document.getElementById('unit-dist').value, DISTANCE_UNITS);
+  const star = { name, R, T, d, i_mass };
+  analyzeStar(star);
+  classifier(star);
+  registry.push(star);
+  refreshAll();
+  selectStar(registry.length - 1);
+  ['inp-name','inp-radius','inp-temp','inp-dist','inp-mass'].forEach(id => document.getElementById(id).value = '');
+  toast(`✦ ${name} added to registry`);
+}
+
+function refreshAll() {
+  refreshList();
+  refreshTable();
+  drawHR();
+  refreshComparePickers();
+  saveRegistry();
+}
+
+function selectStar(i) {
+  selectedIdx = i;
+  document.querySelectorAll('.star-chip').forEach((c,j) => c.classList.toggle('active', j === i));
+  renderResults(registry[i]);
+}
+
+function refreshList() {
+  const el = document.getElementById('stars-list');
+  document.getElementById('star-count').textContent = registry.length + ' star' + (registry.length !== 1 ? 's' : '');
+  if (!registry.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:1.2rem"><div class="empty-icon">✦</div><div class="empty-label">No stars analyzed yet</div></div>`;
+    return;
+  }
+  el.innerHTML = registry.map((s, i) => {
+    const rCol = rc(s.r_type);
+    return `<div class="star-chip ${i === selectedIdx ? 'active' : ''}" data-idx="${i}">
+      <div>
+        <div class="star-chip-name">${escapeHTML(s.name)}</div>
+        <div class="star-chip-meta">${fmtT(s.T)} K · ${s.r_type}</div>
+      </div>
+      <div class="star-chip-dot" style="background:${rCol.b}"></div>
+    </div>`;
+  }).join('');
+}
+
+function refreshTable() {
+  const tbody = document.getElementById('star-tbody');
+  document.getElementById('table-count').textContent = registry.length + ' entr' + (registry.length === 1 ? 'y' : 'ies');
+  if (!registry.length) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2.5rem;font-size:0.7rem;">No stars analyzed yet</td></tr>`;
+    return;
+  }
+  const sorted = [...registry].sort((a, b) =>
+    sortKey === 'redshift_F' ? a[sortKey] - b[sortKey] : b[sortKey] - a[sortKey]
+  );
+  tbody.innerHTML = sorted.map(s => {
+    const col = getColor(s.lambda);
+    const rCol = rc(s.r_type);
+    const origIdx = registry.indexOf(s);
+    return `<tr data-idx="${origIdx}">
+      <td class="td-name">${escapeHTML(s.name)}</td>
+      <td><span style="display:inline-flex;align-items:center;gap:0.4rem;"><span style="width:8px;height:8px;border-radius:50%;background:${s.bb};flex-shrink:0;"></span>${s.spec}</span></td>
+      <td>${fmtT(s.T)}</td>
+      <td>${s.L.toExponential(2)}</td>
+      <td>${s.lambda * 1e9 >= 1e6 ? (s.lambda * 1e9).toExponential(2) : (s.lambda * 1e9).toFixed(1)}</td>
+      <td>${s.F.toExponential(2)}</td>
+      <td>${s.schw_R.toFixed(2)}</td>
+      <td>${s.redshift_F.toFixed(5)}</td>
+      <td><span class="td-badge" style="color:${rCol.t};border-color:${rCol.b};background:${rCol.bg}">${s.r_type}</span></td>
+      <td><span class="td-badge" style="color:${col.hex};border-color:${col.hex}40;background:${col.hex}10">${col.label}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function sortStars(key, btn) {
+  sortKey = key;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  refreshTable();
+}
+
+function clearAll() {
+  registry = []; selectedIdx = -1;
+  refreshAll();
+  showVisual(null);
+  document.getElementById('results-body').innerHTML = `
+    <div class="panel empty-state" style="min-height:280px;">
+      <div class="empty-icon">⊙</div>
+      <div class="empty-label">Analyze a star to see results</div>
+      <div class="empty-sub">Fill in the parameters on the left</div>
+    </div>`;
+  toast('Registry cleared');
+}
+
+function loadPresets() {
+  PRESETS.forEach(p => {
+    const star = { ...p };
+    analyzeStar(star); classifier(star);
+    registry.push(star);
+  });
+  refreshAll();
+  selectStar(0);
+  toast(`✦ ${PRESETS.length} catalogue stars loaded`);
+}
+
+/* ════════════════════════════════════════
+   COMPARE MODE — two registry stars side by side
+════════════════════════════════════════ */
+const cmp = { a: -1, b: -1, stage: null, state: 'idle', seen: false };
+
+function refreshComparePickers() {
+  const selA = document.getElementById('cmp-a'), selB = document.getElementById('cmp-b');
+  const enough = registry.length >= 2;
+  document.getElementById('compare-body').hidden = !enough;
+  document.getElementById('compare-empty').hidden = enough;
+  if (!enough) {
+    selA.innerHTML = selB.innerHTML = '';
+    cmp.a = cmp.b = -1;
+    cmp.stage?.setStars([]);
+    return;
+  }
+  if (!(cmp.a >= 0 && cmp.a < registry.length)) cmp.a = 0;
+  if (!(cmp.b >= 0 && cmp.b < registry.length) || cmp.b === cmp.a) cmp.b = cmp.a === 0 ? 1 : 0;
+  const opts = registry.map((s, i) => `<option value="${i}">${escapeHTML(s.name)}</option>`).join('');
+  selA.innerHTML = selB.innerHTML = opts;
+  selA.value = cmp.a; selB.value = cmp.b;
+  renderCompare();
+}
+
+function compareStats(s) {
+  const kind = objectKind(s);
+  const row = (k, v) => `<div><span class="k">${k}</span>${v}</div>`;
+  return [
+    row('Class', s.spec),
+    row('Temperature', `${fmtT(s.T)} K`),
+    row(kind === 'blackhole' ? 'Horizon' : 'Radius', escapeHTML(trueSizeLabel(s, kind))),
+    row('Luminosity', `${fmtSci(s.L / SOLAR_L)} L☉`),
+    row('Peak λ', fmtPeakText(s.lambda)),
+    row('Fate', s.r_type),
+  ].join('');
+}
+
+async function renderCompare() {
+  const A = registry[cmp.a], B = registry[cmp.b];
+  if (!A || !B) return;
+  const pairs = [['a', A, B], ['b', B, A]];
+  for (const [k, s, other] of pairs) {
+    const K = k.toUpperCase();
+    document.getElementById(`cmp-name-${k}`).textContent = s.name;
+    document.getElementById(`cmp-size-${k}`).textContent = visualParams(s).sizeLabel;
+    document.getElementById(`cmp-stats-${k}`).innerHTML = compareStats(s);
+    document.getElementById(`cmp-legend-${k}`).innerHTML =
+      `<div class="lg"><span class="sw" style="background:${s.bb}"></span>${escapeHTML(s.name)}</div>` +
+      `<div class="lg"><span class="sw" style="background:#566080"></span>${escapeHTML(other.name)} (reference)</div>`;
+    const opts = {
+      canvas: document.getElementById(`cmpSpec${K}`), tip: document.getElementById(`cmpTip${K}`),
+      ref: { T: other.T, color: '#566080', name: other.name },
+    };
+    drawSpectrum(s, null, opts);
+    wireSpectrumHover(s, opts);
+  }
+  if (!cmp.seen) return;            // don't spin up a second WebGL context until scrolled near
+  if (cmp.state === 'idle') {
+    cmp.state = 'loading';
+    cmp.stage = await createStage(document.getElementById('cmpCanvas'), {
+      spacing: 2.6,
+      onContextLost: () => { cmp.stage = null; cmp.state = 'failed'; renderCompare(); },
+    });
+    cmp.state = cmp.stage ? 'ready' : 'failed';
+  }
+  if (cmp.state === 'loading') return;
+  const A2 = registry[cmp.a], B2 = registry[cmp.b];   // selection may have changed while loading
+  if (!A2 || !B2) return;
+  const failed = cmp.state === 'failed';
+  document.getElementById('cmpCanvas').hidden = failed;
+  document.getElementById('cmpFallback').hidden = !failed;
+  if (failed) {
+    drawStarVisual2D(A2, document.getElementById('cmp2dA'));
+    drawStarVisual2D(B2, document.getElementById('cmp2dB'));
+  } else {
+    cmp.stage.setStars([visualParams(A2), visualParams(B2)]);
+  }
+}
+
+/* ════════════════════════════════════════
+   SHARE LINKS — registry encoded in the URL hash (#c=…)
+════════════════════════════════════════ */
+function shareLink() {
+  if (!registry.length) { toast('⚠ Nothing to share — analyze stars first'); return; }
+  const url = location.href.split('#')[0] + '#c=' + encodeShare(registry);
+  const done = () => toast(`⧉ Share link copied (${registry.length} star${registry.length !== 1 ? 's' : ''})`);
+  const manual = () => window.prompt('Copy this share link:', url);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done, manual);
+  else manual();
+}
+
+// Merge a shared catalogue into the registry (never replaces local data).
+// Returns the index of the first shared star, or -1.
+function importFromHash() {
+  if (!location.hash.startsWith('#c=')) return -1;
+  const entries = decodeShare(location.hash.slice(3));
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!entries.length) { toast('⚠ Share link is invalid or empty'); return -1; }
+  const key = s => [s.name, s.R, s.T, s.d, s.i_mass].join('|');
+  const index = new Map(registry.map((s, i) => [key(s), i]));
+  let first = -1, added = 0;
+  entries.forEach(s => {
+    const k = key(s);
+    if (!index.has(k)) {
+      analyzeStar(s); classifier(s);
+      registry.push(s);
+      index.set(k, registry.length - 1);
+      added++;
+    }
+    if (first < 0) first = index.get(k);
+  });
+  toast(added
+    ? `✦ Shared catalogue: ${added} star${added !== 1 ? 's' : ''} added`
+    : '✦ Shared catalogue already in your registry');
+  return first;
+}
+
+/* ════════════════════════════════════════
+   PERSISTENCE & EXPORT
+════════════════════════════════════════ */
+const LS_KEY = 'stellar-observatory-v3';
+
+function saveRegistry() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(
+      registry.map(({ name, R, T, d, i_mass }) => ({ name, R, T, d, i_mass }))
+    ));
+  } catch (e) { /* private mode / quota — persistence is best-effort */ }
+}
+
+function loadRegistry() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    sanitizeEntries(raw).forEach(s => {
+      analyzeStar(s); classifier(s);
+      registry.push(s);
+    });
+  } catch (e) { /* corrupt state — start fresh */ }
+}
+
+function exportCSV() {
+  if (!registry.length) { toast('⚠ Nothing to export — analyze stars first'); return; }
+  const cols = ['name','spec','T_K','R_m','distance_m','initial_mass_Msun','luminosity_W','peak_lambda_m',
+                'flux_W_m2','rad_pressure_Pa','schwarzschild_R_m','redshift_factor','observed_T_K',
+                'M_bol','m_bol','log_g_cgs','v_esc_m_s','hz_inner_AU','hz_outer_AU','remnant'];
+  const rows = registry.map(s => [
+    csvField(s.name), s.spec, s.T, s.R, s.d, s.i_mass, s.L, s.lambda,
+    s.F, s.P, s.schw_R, s.redshift_F, s.redshift_T,
+    s.M_bol, s.m_bol, s.logg, s.v_esc, s.hz_in, s.hz_out, `"${s.r_type}"`
+  ].join(','));
+  const blob = new Blob([[cols.join(','), ...rows].join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'stellar-observatory-catalogue.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('⭳ Catalogue exported as CSV');
+}
+
+/* ════════════════════════════════════════
+   TOAST
+════════════════════════════════════════ */
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ════════════════════════════════════════
+   SCROLL REVEAL
+════════════════════════════════════════ */
+const revealObs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+/* ════════════════════════════════════════
+   BOOT
+════════════════════════════════════════ */
+// Module scope isn't global: expose what the static onclick= attributes call
+Object.assign(window, { addStar, loadPresets, clearAll, sortStars, exportCSV, closeMobileNav, shareLink });
+
+// Unit selectors: update the example placeholder for the chosen unit
+const UNIT_HINTS = {
+  'unit-radius': ['inp-radius', { Rsun: '1.0', km: '695700', m: '6.957e8' }],
+  'unit-dist':   ['inp-dist',   { ly: '4.24', pc: '1.30', AU: '1', m: '1.496e11' }],
+};
+Object.entries(UNIT_HINTS).forEach(([sel, [inp, hints]]) => {
+  document.getElementById(sel).addEventListener('change', e => {
+    document.getElementById(inp).placeholder = hints[e.target.value];
+  });
+});
+
+// Visual panel: render / size toggle, evolution player
+document.querySelectorAll('#visual-panel .seg button').forEach(b =>
+  b.addEventListener('click', () => setVisMode(b.dataset.view)));
+document.getElementById('size-log').addEventListener('change', refreshVisual);
+document.getElementById('evo-play').addEventListener('click', () => (evo.playing ? evoPause() : evoPlay()));
+document.getElementById('evo-now').addEventListener('click', evoReset);
+document.getElementById('evo-slider').addEventListener('input', e => { evoPause(); evoSet(e.target.value / 1000); });
+document.getElementById('results-body').addEventListener('click', e => {
+  if (!e.target.closest('[data-evo-preview]')) return;
+  document.getElementById('visual-panel').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+  evoSet(0);
+  evoPlay();
+});
+
+// Compare pickers; the compare renderer is created only once the panel is near the viewport
+['a', 'b'].forEach(k => document.getElementById(`cmp-${k}`).addEventListener('change', e => {
+  cmp[k] = +e.target.value;
+  renderCompare();
+}));
+new IntersectionObserver((es, obs) => {
+  if (es.some(e => e.isIntersecting)) { cmp.seen = true; obs.disconnect(); renderCompare(); }
+}, { rootMargin: '300px' }).observe(document.getElementById('compare-panel'));
+
+// Registry chips and table rows are rebuilt often — delegate their clicks
+document.getElementById('stars-list').addEventListener('click', e => {
+  const chip = e.target.closest('.star-chip[data-idx]');
+  if (chip) selectStar(+chip.dataset.idx);
+});
+document.getElementById('star-tbody').addEventListener('click', e => {
+  const row = e.target.closest('tr[data-idx]');
+  if (!row) return;
+  selectStar(+row.dataset.idx);
+  document.getElementById('analyzer').scrollIntoView({ behavior: 'smooth' });
+});
+
+wireHRHover();
+loadRegistry();
+const sharedIdx = importFromHash();
+if (registry.length) {
+  if (sharedIdx >= 0) saveRegistry();
+  refreshList();
+  refreshTable();
+  refreshComparePickers();
+  selectStar(sharedIdx >= 0 ? sharedIdx : 0);
+}
+requestAnimationFrame(() => drawHR());
+window.addEventListener('hashchange', () => {
+  const i = importFromHash();
+  if (i >= 0) { refreshAll(); selectStar(i); }
+});
+
+let chartResizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    drawHR();
+    if (selectedIdx >= 0 && registry[selectedIdx]) {
+      if (stageState === 'failed' || visMode === 'size') refreshVisual();
+      drawSpectrum(registry[selectedIdx]);
+    }
+    if (registry.length >= 2) renderCompare();
+  }, 150);
+});
+</script>
+</body>
+</html>
