@@ -35,4 +35,6 @@ Programul și datele despre concentrare sunt demonstrative în această primă v
 
 ## Star Analyzer
 
+**Demo online: https://stellar-observatory-zeta.vercel.app**
+
 Folderul `star-analyzer/` conține un proiect separat: Stellar Observatory, un analizor de stele într-o singură pagină (HTML, CSS și JavaScript, fără compilare). Calculează luminozitatea, spectrul Planck, clasa spectrală și evoluția stelelor și le afișează în 3D cu WebGL. Instrucțiunile de pornire sunt în [star-analyzer/README.md](star-analyzer/README.md).

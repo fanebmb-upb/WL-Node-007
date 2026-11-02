@@ -1,5 +1,7 @@
 # Stellar Observatory — Star Analyzer
 
+**Live demo: https://stellar-observatory-zeta.vercel.app**
+
 A single-page star analyzer: enter a star's radius, temperature, distance and mass
 (or load the presets) to get its luminosity, Planck spectrum, spectral class,
 gravitational redshift and evolution timeline, plotted on a live
