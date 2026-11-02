@@ -1,0 +1,9 @@
+{
+  "name": "stellar-observatory",
+  "private": true,
+  "type": "module",
+  "description": "Static star analyzer; no dependencies. package.json only marks js/ as ES modules for node --test.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
